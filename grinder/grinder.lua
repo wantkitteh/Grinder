@@ -19,8 +19,6 @@ function Grinder_OnLoad()
 	
 	SlashCmdList["Grinder"] = Grinder_Command;
 	SLASH_Grinder1 = "/splits";
-	
-	RequestTimePlayed()
 end
 
 -- Called by XML on event
@@ -128,6 +126,9 @@ function Grinder_OnEvent()
 	end
 	
 	if (event == "PLAYER_ENTERING_WORLD") then
+	
+		RequestTimePlayed()
+		
 		if (UnitLevel("player") == 1 and UnitXP("player") == 0 and KillsTotal ~= 0) then
 			
 			DEFAULT_CHAT_FRAME:AddMessage("WARNING: Grinder stats from previous run will be lost on first XP gain",1,0,0); -- RED
