@@ -1,7 +1,7 @@
 ## Interface: 11200
-## Title: Grind Tracker
-## Version: 0.1
-## Notes: Player-specified XP grind planner and tracker
+## Title: Grinder
+## Version: 0.2a
+## Notes: Hardcore-friendly speedrunning split tracker and progress stat display (NB: DO NOT ADD TO PRE-EXISTING CHARACTERS, add when creating new characters only)
 ## Author: AlissaJones
-## SavedVariablesPerCharacter: KillsTotal, KillsLevel, QuestsTotal, QuestsLevel, KillXPTotal, KillXPLevel, QuestXPTotal, QuestXPLevel, Splits, CharClass
+## SavedVariablesPerCharacter: KillsTotal, KillsLevel, QuestsTotal, QuestsLevel, KillXPTotal, KillXPLevel, QuestXPTotal, QuestXPLevel, SplitsCurrent, SplitsSaved, CharClass
 grinder.xml

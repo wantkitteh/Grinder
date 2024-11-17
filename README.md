@@ -15,8 +15,23 @@ Usage:
 1) Extract the "Grinder" folder from inside the master folder
 2) Place it inside Interface/Addons
 3) You're good to go! Data gathering starts automatically
-4) See the full detailed data it's hoarding with command /splits
+
+Commands:
+	/splits live	: Shows full live split data
+	/splits saved	: Shows full saved split data
+	/splits store	: Saves live splits data
+	/splits comp	: Generates splits for live vs saved data
+	
+NB:
+Split data is stored per-character, as opposed to per-account. Assuming you reuse the same character name when repeating runs, this is the simplest way to allow multiple independent splits to be saved. If you do want to transfer split data between characters, you can copy the Grinder.lua file in the "wtf/account/ACCOUNT NAME/SERVER NAME/CHAR NAME/SavedVariables" folder between characters no problem - AS LONG AS YOU REMEMBER not to try to start new data with anything other than a completely fresh character.
 
 Other Known Issues that *might* get fixed later:
 1) No localization yet. Seriously, I've been working on this for less than 48 hours. I'm a fast lady, but I'm not that fast!
 2) Slight accuracy issues - I can't find event hooks that directly ID experience from quests and exploration, so exploration may get classed as mob kills, and grey quests won't proc the workaround flag I set up causing the next exploration/mob kill to be misattributed as quest XP. No big deal in the grand scheme of things, but it's still annoying.
+
+Version Data
+	0.1a	:	Initial upload
+	
+	0.2a	:	Added split data storage and comparison functions
+				Added estimated split difference to HUD (when saved data is available)
+				Minor cosmetic bug fixes
