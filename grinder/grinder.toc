@@ -1,0 +1,7 @@
+## Interface: 11200
+## Title: Grind Tracker
+## Version: 0.1
+## Notes: Player-specified XP grind planner and tracker
+## Author: AlissaJones
+## SavedVariablesPerCharacter: KillsTotal, KillsLevel, QuestsTotal, QuestsLevel, KillXPTotal, KillXPLevel, QuestXPTotal, QuestXPLevel, Splits, CharClass
+grinder.xml
