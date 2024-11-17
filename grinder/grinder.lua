@@ -29,7 +29,7 @@ function Grinder_OnLoad()
 	if (QuestXPLevel == nil) then QuestXPLevel = 0 end
 	
 	if (Splits == nil) then Splits = {} end
-	if (CharClass == nil) then CharClass = 0 end
+	if (CharClass == nil) then CharClass = UnitClass("player") end
 	
 	RequestTimePlayed()
 end
