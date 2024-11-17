@@ -1,5 +1,5 @@
 ** Grinder **
-** For WoW 1.12 **
+** For WoW 1.12.1 (Build 5875) **
 
 Created out of frustration at the lack of (or rather my inability to find) good speedrunning split tools for the WoW 1.12 client. Starting from zero prior WoW addon coding experience, I started with a basic "Hello World" tutorial I found online, moved on to reading other mods with some of the functionality I was looking to implement, then broke out the APIs and event lists to figure the rest out myself (with a few reuable functions and examples lifted from... er, wherever I got them)
 
