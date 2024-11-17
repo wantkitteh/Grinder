@@ -79,6 +79,7 @@ function Grinder_OnEvent()
 		TimeToLevel = SecondsToTimeShort(XPReq / (XPCurrent / (time() - SegmentStartTime + SegmentAdditional)));
 		MessageText = MessageText.." ("..TimeToLevel..")";
 		
+		SavedSplitCount = 0;
 		for i, v in ipairs(SplitsSaved) do SavedSplitCount = i end;
 		if (UnitLevel("player") <= SavedSplitCount) then
 			SSplitData = SplitsSaved[UnitLevel("player")];
