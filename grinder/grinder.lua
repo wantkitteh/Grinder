@@ -1,189 +1,340 @@
-local ResetConfirm = false;
-local SegmentAdditional = 0;
+-- Defines
 local SegmentStartTime = 0;
-local SegmentStartXP = 0;
-local TimeInit = false;
-local NextXPfromQuest = false;
+local SegmentAdditional = 0;
 local ResetOnNextXP = false;
-local ComparisonTime = 0;
 
 -- Called by XML on addon load
 function Grinder_OnLoad()
-	this:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN");
-	this:RegisterEvent("QUEST_COMPLETE");
-	this:RegisterEvent("PLAYER_LEVEL_UP");
 	this:RegisterEvent("PLAYER_ENTERING_WORLD");
-	this:RegisterEvent("ADDON_LOADED");
 	this:RegisterEvent("TIME_PLAYED_MSG");
-	this:RegisterEvent("PLAYER_DEAD");
-	
+	this:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN");
+	this:RegisterEvent("PLAYER_LEVEL_UP");
+	this:RegisterEvent("QUEST_COMPLETE");
 	SlashCmdList["Grinder"] = Grinder_Command;
-	SLASH_Grinder1 = "/splits";
+	SLASH_Grinder1 = "/grind";
 end
 
 -- Called by XML on event
 function Grinder_OnEvent()
-	-- DEFAULT_CHAT_FRAME:AddMessage(event,0.9,0.9,0.9);
-	if (event == "CHAT_MSG_COMBAT_XP_GAIN" and UnitLevel("player") < 60) then
-		local XPGain, XPLevel, XPCurrent, XPReq, KillXPRate, KillsToLevel, QuestsToLevel, TimeToLevel, SavedSplitCount, SplitNow, SSplitData, MessageText;
-		
-		if (ResetOnNextXP == true) then
-			DEFAULT_CHAT_FRAME:AddMessage("Stats from previous run have been reset. Good luck, brave adventurer!",1,0,0)
-			KillsTotal = 0;
-			KillsLevel = 0;
-			QuestsTotal = 0;
-			QuestsLevel = 0;
-			KillXPTotal = 0;
-			KillXPLevel = 0;
-			QuestXPTotal = 0;
-			QuestXPLevel = 0;
-			CharClass = UnitClass("player");
-			ResetOnNextXP = false;
+	-- DEFAULT_CHAT_FRAME:AddMessage(event);
+	if (event == "PLAYER_ENTERING_WORLD") then	
+		DEFAULT_CHAT_FRAME:AddMessage("Grinder: Plugin loaded successfully, type /grind for options");
+		if (FirstInit == nil) then	
+			-- DEFAULT_CHAT_FRAME:AddMessage("First Init");		
 			
-			SplitsCurrent = {};
-			collectgarbage();
-		end;			
-		
-		XPGain = getnumbersfromtext(arg1);
-		XPLevel = UnitXPMax("player")
-		XPCurrent = UnitXP("player") + XPGain;
-		XPReq = XPLevel - XPCurrent;
-		
-		if (NextXPfromQuest == true) then
-			QuestXPTotal = QuestXPTotal + XPGain;
-			QuestXPLevel = QuestXPLevel + XPGain;
-			QuestsLevel = QuestsLevel + 1;
-			QuestsTotal = QuestsTotal + 1;
+			CurrentRun = {};
+			ResetCurrentRun();
 			
-			QuestsToLevel = (XPReq / (QuestXPLevel / QuestsLevel)) + 1;
+			SavedRun = {};		
+			ResetSavedRun();	
 			
-			MessageText = string.format("%.0f", QuestsToLevel).." qtl";
-		end
-		
-		if (NextXPfromQuest == false) then
-			KillXPTotal = KillXPTotal + XPGain;
-			KillXPLevel = KillXPLevel + XPGain;
-			KillsLevel = KillsLevel + 1;
-			KillsTotal = KillsTotal + 1;			
-			
-			KillsToLevel = (XPReq / (KillXPLevel / KillsLevel)) + 1;
-			
-			MessageText = string.format("%.0f", KillsToLevel).." ktl"
-		end
-		
-		KillXPRate = (XPCurrent / 1000) / ((time() - SegmentStartTime + SegmentAdditional) / 3600);
-		MessageText = MessageText..", "..string.format("%.1f", KillXPRate).."k/hr";
-		
-		TimeToLevel = SecondsToTimeShort(XPReq / (XPCurrent / (time() - SegmentStartTime + SegmentAdditional)));
-		MessageText = MessageText.." ("..TimeToLevel..")";
-		
-		SavedSplitCount = 0;
-		for i, v in ipairs(SplitsSaved) do SavedSplitCount = i end;
-		if (UnitLevel("player") <= SavedSplitCount) then
-			SSplitData = SplitsSaved[UnitLevel("player")];
-			SplitNow = ((time() - SegmentStartTime + SegmentAdditional) + (XPReq / (XPCurrent / (time() - SegmentStartTime + SegmentAdditional)))) - SSplitData[2];
-			if (SplitNow < 0) then
-				MessageText = (MessageText.." "..SecondsToTimeShort(SplitNow))
-			else
-				MessageText = (MessageText.." +"..SecondsToTimeShort(SplitNow))
+			if (UnitLevel("player") ~= 1) then
+				if (UnitXP("player") ~= 0) then
+					DEFAULT_CHAT_FRAME:AddMessage("Grinder: Addon detected mid-run pre-existing character",1,0,0);
+					DEFAULT_CHAT_FRAME:AddMessage("Grinder: Display of progress stats temporarily limited",1,0,0);
+					CurrentRun[UnitLevel("player")]["CompTime"] = -1;
+				end
+			end		
+			FirstInit = true;	
+		else	
+			-- DEFAULT_CHAT_FRAME:AddMessage("Normal Init");
+			if (UnitLevel("player") == 1) then
+				if (UnitXP("player") == 0) then
+					DEFAULT_CHAT_FRAME:AddMessage("Grinder: New run detected, don't forget to save run data: /splits save",1,0,0);
+					ResetOnNextXP = true;
+				end
 			end
 		end
-				
-		UIErrorsFrame:AddMessage(MessageText,1,1,0,1, UIERRORS_HOLD_TIME);
-		
-		NextXPfromQuest = false;
+		RequestTimePlayed();	
+	end
+	
+	if (event == "TIME_PLAYED_MSG") then
+		-- DEFAULT_CHAT_FRAME:AddMessage("Segment Time Init");
+		SegmentStartTime = time();
+		SegmentAdditional = arg2;
 	end
 	
 	if (event == "QUEST_COMPLETE") then
+		-- DEFAULT_CHAT_FRAME:AddMessage("Next XP from Quest flag raised");
 		NextXPfromQuest = true;
 	end
 	
+	if (event == "CHAT_MSG_COMBAT_XP_GAIN") then
+		--DEFAULT_CHAT_FRAME:AddMessage("XP Gain Handler");
+		if (ResetOnNextXP == true) then
+			DEFAULT_CHAT_FRAME:AddMessage("Grinder: Going agane, good luck!",0,1,1);
+			ResetCurrentRun();
+			ResetOnNextXP = false;
+		end
+	
+		local XPgain = getnumbersfromtext(arg1);
+		local XPlevel = UnitXPMax("player");
+		local XPcurrent = UnitXP("player") + XPgain;
+		local XPreq = XPlevel - XPcurrent;
+		local CLvl = UnitLevel("player");
+				
+		if (NextXPfromQuest == true) then
+			CurrentRun[CLvl]["QuestCount"] = CurrentRun[CLvl]["QuestCount"] + 1;
+			CurrentRun[CLvl]["QuestXP"] = CurrentRun[CLvl]["QuestXP"] + XPgain;
+			NextXPfromQuest = false;
+		else
+			CurrentRun[CLvl]["KillCount"] = CurrentRun[CLvl]["KillCount"] + 1;
+			CurrentRun[CLvl]["KillXP"] = CurrentRun[CLvl]["KillXP"] + XPgain;
+			
+			local MessageText = "";
+			
+			if (XPreq > 0) then
+				if (CurrentRun[CLvl]["CompTime"] ~= -1) then
+					MessageText = string.format("%.1f", XPreq / (CurrentRun[CLvl]["KillXP"] / CurrentRun[CLvl]["KillCount"])).." ktl, ";
+					MessageText = MessageText..string.format("%.1f", (XPcurrent / 1000) / ((time() - SegmentStartTime + SegmentAdditional) / 3600)).."k/hr, ";
+					MessageText = MessageText..SecondsToShortTime(XPreq / (XPcurrent / (time() - SegmentStartTime + SegmentAdditional)));
+					if (CurrentRun[CLvl]["CompTime"] ~= -1) then
+						if (SavedRun[CLvl]["CompTime"] > 0) then
+							local SplitPredict = 0;
+							SplitPredict = ((time() - SegmentStartTime + SegmentAdditional) + (XPreq / (XPcurrent / (time() - SegmentStartTime + SegmentAdditional)))) - SavedRun[CLvl]["CompTime"];
+							MessageText = MessageText.." (";
+							if (SplitPredict > 0) then
+								MessageText = MessageText.. "+";
+							end
+							if (SplitPredict < 0) then
+								MessageText = MessageText.. "-";
+							end
+						MessageText = MessageText..SecondsToShortTime(abs(SplitPredict))..")"
+						end
+					end
+				else
+					MessageText = string.format("%.1f", XPreq / XPgain).." ktl";
+				end
+				UIErrorsFrame:AddMessage(MessageText,1,1,0,1, UIERRORS_HOLD_TIME);
+			end
+		end
+	end
+	
 	if (event == "PLAYER_LEVEL_UP") then
-		local CurrentLevel, TimeTakenLevel, ActualLevelXP, SplitData;
+		local CLvl = UnitLevel("player")
+		local CTxp = CurrentRun[CLvl]["KillXP"] + CurrentRun[CLvl]["QuestXP"]
+		local MessageText = "";
+		local TCRunTime = 0;
+		local TCKills = 0;
+		local TCQuests = 0;
+		local TSRunTime = 0;
 		
-		CurrentLevel = UnitLevel("player");
-		TimeTakenLevel = (time() - SegmentStartTime + SegmentAdditional);
-		ActualLevelXP = KillXPLevel + QuestXPLevel;
 		
-		SplitData = {CurrentLevel, TimeTakenLevel, KillsLevel, KillXPLevel, QuestsLevel, QuestXPLevel};
-		SplitsCurrent[CurrentLevel] = SplitData;
+		if (CurrentRun[CLvl]["CompTime"] > -1) then -- TEST THIS
+			CurrentRun[CLvl]["CompTime"] = (time() - SegmentStartTime + SegmentAdditional);			
+			if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] > 0) then
+				MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (-"..SecondsToTime(abs(SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"]))..")"
+			end
+			if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] < 0) then
+				MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (+"..SecondsToTime(abs(SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"]))..")"
+			end
+			if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] == 0) then
+				MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (Dead Heat)"
+			end
+			DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);		
+		end -- TEST THIS
 		
-		DEFAULT_CHAT_FRAME:AddMessage(UnitName"player".." the "..UnitClass("player").." completed Level "..CurrentLevel.." in "..SecondsToTime(TimeTakenLevel)..".")
-		DEFAULT_CHAT_FRAME:AddMessage("Total XP earned was "..(KillXPLevel+QuestXPLevel).." : "..KillXPLevel.." ["..string.format("%.1f",((KillXPLevel/ActualLevelXP)*100)).."%] from "..KillsLevel.." mobs, "..QuestXPLevel.." ["..string.format("%.1f",((QuestXPLevel/ActualLevelXP)*100)).."%] from "..QuestsLevel.." quests")
-									
-		KillsLevel = 0;
-		KillXPLevel = 0;
-		QuestsLevel = 0;
-		QuestXPLevel = 0;
-			
+		if (SavedRun[CLvl]["CompTime"] > 0 and SavedRun[CLvl]["CompTime"] > 0) then
+			for i=1,CLvl,1
+			do
+				TCRunTime = TCRunTime + CurrentRun[i]["CompTime"];
+				TCKills = TCKills + CurrentRun[i]["KillCount"];
+				TCQuests = TCQuests + CurrentRun[i]["QuestCount"];
+				TSRunTime = TSRunTime + SavedRun[i]["CompTime"];
+			end			
+			if (TSRunTime - TCRunTime > 0 ) then
+				MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (+"..SecondsToTime(abs(TSRunTime - TCRunTime))..")";
+			end
+			if (TSRunTime - TCRunTime < 0 ) then
+				MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (+"..SecondsToTime(abs(TSRunTime - TCRunTime))..")";				
+			end
+			if (TSRunTime - TCRunTime == 0 ) then
+				MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (Dead Heat!)";
+			end
+			DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);
+		end
+		
+		DEFAULT_CHAT_FRAME:AddMessage(CurrentRun[CLvl]["KillCount"].." mobs killed ("..TCKills.." Total) for "..CurrentRun[CLvl]["KillXP"].."XP ("..string.format("%.1f", CurrentRun[CLvl]["KillXP"] / CTxp * 100).."%)",0.5,1,1);
+		DEFAULT_CHAT_FRAME:AddMessage(CurrentRun[CLvl]["QuestCount"].." quests completed ("..TCQuests.." Total) for "..CurrentRun[CLvl]["QuestXP"].."XP ("..string.format("%.1f", CurrentRun[CLvl]["QuestXP"] / CTxp * 100).."%)",0.5,1,1);
+		
+		SegmentStartTime = time();
 		SegmentAdditional = 0;
-		SegmentStartTime = time();
-		
-		if (CurrentLevel == 60) then
-			DumpSplits()
-		end
-		
-	end
-	
-	if (event == "PLAYER_ENTERING_WORLD") then
-	
-		RequestTimePlayed()
-		
-		if (UnitLevel("player") == 1 and UnitXP("player") == 0 and KillsTotal ~= 0) then
-			
-			DEFAULT_CHAT_FRAME:AddMessage("WARNING: Grinder stats from previous run will be lost on first XP gain",1,0,0); -- RED
-			
-			ResetOnNextXP = true;
-			
-			if (KillsTotal == nil) then KillsTotal = 0 end
-			if (KillsLevel == nil) then KillsLevel = 0 end
-			if (QuestsTotal == nil) then QuestsTotal = 0 end
-			if (QuestsLevel == nil) then QuestsLevel = 0 end
-	
-			if (KillXPTotal == nil) then KillXPTotal = 0 end
-			if (KillXPLevel == nil) then KillXPLevel = 0 end
-			if (QuestXPTotal == nil) then QuestXPTotal = 0 end
-			if (QuestXPLevel == nil) then QuestXPLevel = 0 end
-	
-			if (SplitsCurrent == nil) then SplitsCurrent = {} end
-			if (SplitsSaved == nil) then SplitsSaved = {} end
-			if (CharClass == nil) then CharClass = UnitClass("player") end
-		end
-	end
-	
-	if (event == "TIME_PLAYED_MSG" and TimeInit == false) then
-		SegmentAdditional = arg2;
-		SegmentStartTime = time();
-		TimeInit = true;
-	end
-	
-	if (event == "PLAYER_DEAD") then
-		DumpCurrentSplits()
-		DEFAULT_CHAT_FRAME:AddMessage("DON'T FORGET TO STORE YOUR SPLITS!!! (/splits store)",1,0,0); -- RED
 	end
 end
 
 -- Slash command handler
 function Grinder_Command(args)
+	
 	if (args == "") then
-		DEFAULT_CHAT_FRAME:AddMessage("Grinder Commands:");
-		DEFAULT_CHAT_FRAME:AddMessage(" /splits live : show current split data");
-		DEFAULT_CHAT_FRAME:AddMessage(" /splits saved : show saved split data");
-		DEFAULT_CHAT_FRAME:AddMessage(" /splits store : save current split data");
-		DEFAULT_CHAT_FRAME:AddMessage(" /splits comp : compare current and saved split times");
+		DEFAULT_CHAT_FRAME:AddMessage("Grinder Commands:",0.85,0,0.85);
+		DEFAULT_CHAT_FRAME:AddMessage("  /grind delete : erase saved data",0.85,0,0.85);
+		DEFAULT_CHAT_FRAME:AddMessage("  /grind save : save current data",0.85,0,0.85);
+		DEFAULT_CHAT_FRAME:AddMessage("  /grind splits : generate current vs saved split times report", 0.85,0,0.85);
+		DEFAULT_CHAT_FRAME:AddMessage("  /grind data (current|saved) : show full run data", 0.85,0,0.85);
 	end
-	if (args == "live") then
-		DumpCurrentSplits()
+	
+	if (args == "delete") then
+		ResetSavedRun();
 	end
-	if (args == "saved") then
-		DumpSavedSplits()
+	
+	if (args == "save") then
+		SaveCurrentRun();
 	end
-	if (args == "store") then
-		SaveSplits()
+	
+	if (args == "splits") then
+		SplitsReport();
 	end
-	if (args == "comp") then
-		CompareSplits()
+	
+	if (args == "data current") then
+		DumpCurrent();
 	end
+	
+	if (args == "data saved") then
+		DumpSaved();
+	end
+	
+end
+
+function ResetCurrentRun()
+	local i = 0;
+	CurrentRun = {};
+	collectgarbage();
+	for i = 1,59,1
+	do
+		table.insert(CurrentRun, i, {KillCount = 0, KillXP = 0, QuestCount = 0, QuestXP = 0, CompTime = 0})
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("Grinder: Current run data reset",0.25,1,0.25);
+end
+
+function ResetSavedRun()
+	local i = 0;
+	SavedRun = {};
+	collectgarbage();
+	for i = 1,59,1
+	do
+		table.insert(SavedRun, i, {KillCount = 0, KillXP = 0, QuestCount = 0, QuestXP = 0, CompTime = 0})
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("Grinder: Saved run data reset",0.25,1,0.25);
+end
+
+function SaveCurrentRun()
+	if (CurrentRun[1]["CompTime"] > 0) then
+		local i = 0;			
+		for i = 1,59,1
+		do
+			SavedRun[i] = CurrentRun[i];
+		end
+		DEFAULT_CHAT_FRAME:AddMessage("Grinder: Current run data saved",0.25,1,0.25);
+	else
+		if (UnitLevel("player") == 1) then
+			DEFAULT_CHAT_FRAME:AddMessage("Grinder: No data to save",1,1,0);
+		else
+			DEFAULT_CHAT_FRAME:AddMessage("Grinder: FAILED! Cannot save run data that does not begin at lv1",1,0,0);
+		end
+	end
+end
+
+function SplitsReport()
+
+	local TCtime = 0;
+	local TStime = 0;
+	local MessageText = "";
+	
+	DEFAULT_CHAT_FRAME:AddMessage(" -- Grinder Splits Report --",0.5,1,1);
+	for i = 1,59,1
+	do
+		if (SavedRun[i]["CompTime"] > 0 and CurrentRun[i]["CompTime"] > 0) then
+		
+			TCtime = TCtime + CurrentRun[i]["CompTime"];
+			TStime = TStime + SavedRun[i]["CompTime"];
+			
+			MessageText = " [Lv"..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"]).." ("
+			
+			if (CurrentRun[i]["CompTime"] > SavedRun[i]["CompTime"]) then
+				MessageText = MessageText.."+"..SecondsToTime(abs(SavedRun[i]["CompTime"] - CurrentRun[i]["CompTime"]))..")";
+			end
+			if (CurrentRun[i]["CompTime"] < SavedRun[i]["CompTime"]) then
+				MessageText = MessageText.."-"..SecondsToTime(abs(SavedRun[i]["CompTime"] - CurrentRun[i]["CompTime"]))..")";
+			end 
+			if (CurrentRun[i]["CompTime"] == SavedRun[i]["CompTime"]) then
+				MessageText = MessageText.."0)";
+			end
+			
+			if (i > 1) then
+				MessageText = MessageText.." : "..SecondsToTime(TCtime).." ("
+				if (TCtime > TStime) then
+					MessageText = MessageText.."+"..SecondsToTime(abs(TCtime - TStime))..")"
+				end
+				if (TCtime < TStime) then
+					MessageText = MessageText.."-"..SecondsToTime(abs(TCtime - TStime))..")"
+				end
+				if (TCtime == TStime) then
+					MessageText = MessageText.."Dead Heat)"
+				end
+			end
+			DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);
+		end
+	end
+end
+
+function DumpCurrent()
+
+	local TCtime = 0;
+	local TCkillcount = 0;
+	local TCkillXP = 0;
+	local TCquestcount = 0;
+	local TCquestXP = 0;
+	
+	local MessageText = "";
+	
+	DEFAULT_CHAT_FRAME:AddMessage(" == Grinder Report: Current Run ==",0.25,1,0.75);
+	for i = 1,59,1
+	do
+		if (CurrentRun[i]["CompTime"] > 0) then
+			TCtime = TCtime + CurrentRun[i]["CompTime"];
+			TCkillcount = TCkillcount + CurrentRun[i]["KillCount"];
+			TCquestcount = TCquestcount + CurrentRun[i]["QuestCount"];
+			TCkillXP = TCkillXP + CurrentRun[i]["KillXP"];
+			TCquestXP = TCquestXP + CurrentRun[i]["QuestXP"];
+			if (i == 1) then 
+				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"])..", "..TCkillcount.." kills for "..TCkillXP.."XP, "..TCquestcount.." quests for "..TCquestXP.."XP.",0.5,1,1);
+			else
+				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"]).." ("..SecondsToTime(TCtime).."), "..TCkillcount.." kills for "..TCkillXP.."XP, "..TCquestcount.." quests for "..TCquestXP.."XP.",0.5,1,1);
+			end
+		else
+			if (i == 1) then
+				DEFAULT_CHAT_FRAME:AddMessage("Grinder: no data to report",1,0,0);
+			end
+		end
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("Total kills: "..TCkillcount.." for "..TCkillXP.."XP ("..string.format("%.1f",(TCkillXP / (TCkillXP + TCquestXP) * 100)).."%)",0.5,1,1);
+	DEFAULT_CHAT_FRAME:AddMessage("Total quests: "..TCquestcount.." for "..TCquestXP.."XP ("..string.format("%.1f",(TCquestXP / (TCkillXP + TCquestXP) * 100)).."%)",0.5,1,1);
+end
+
+function DumpSaved()
+
+	local TStime = 0;
+	local TSkillcount = 0;
+	local TSkillXP = 0;
+	local TSquestcount = 0;
+	local TSquestXP = 0;
+	
+	local MessageText = "";
+	
+	DEFAULT_CHAT_FRAME:AddMessage(" == Grinder Report: Saved Run ==",0.25,1,0.75);
+	for i = 1,59,1
+	do
+		if (SavedRun[i]["CompTime"] > 0) then
+			TStime = TStime + SavedRun[i]["CompTime"];
+			TSkillcount = TSkillcount + SavedRun[i]["KillCount"];
+			TSquestcount = TSquestcount + SavedRun[i]["QuestCount"];
+			TSkillXP = TSkillXP + SavedRun[i]["KillXP"];
+			TSquestXP = TSquestXP + SavedRun[i]["QuestXP"];
+			DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(SavedRun[i]["CompTime"]).." ("..SecondsToTime(TStime).."), "..TSkillcount.." kills for "..TSkillXP.."XP, "..TSquestcount.." quests for "..TSquestXP.."XP.",0.5,1,1);
+		end
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("Total kills: "..TSkillcount.." for "..TSkillXP.."XP ("..string.format("%.1f",(TSkillXP / (TSkillXP + TSquestXP) * 100)).."%)",0.5,1,1);
+	DEFAULT_CHAT_FRAME:AddMessage("Total quests: "..TSquestcount.." for "..TSquestXP.."XP ("..string.format("%.1f",(TSquestXP / (TSkillXP + TSquestXP) * 100)).."%)",0.5,1,1);
 end
 
 -- ** EXTRA FUNCTIONS **
@@ -197,252 +348,48 @@ function getnumbersfromtext(txt)
 	return str;
 end
 
-function DataSummary()
-	DEFAULT_CHAT_FRAME:AddMessage("Data summary here");
-end
-
-function DumpCurrentSplits()
-	local TotalSplitTime, TotalSplitKills, TotalSplitQuests, TotalSpliKillXP, TotalSplitQuestXP, PercentXPMobs, PercentXPQuests
-	TotalSplitTime = 0;
-	TotalSplitKills = 0;
-	TotalSplitQuests = 0;
-	TotalSplitKillXP = 0;
-	TotalSplitQuestXP = 0;
-	DEFAULT_CHAT_FRAME:AddMessage("[ Live Split Data for "..UnitName"player".." the "..CharClass.." ]",0.65,0.65,1);
-	for i, v in ipairs(SplitsCurrent) do
-		-- SplitData : 1=CurrentLevel, 2=TimeTakenLevel, 3=KillsLevel, 4=KillXPLevel, 5=QuestsLevel, 6=QuestXPLevel
-		TotalSplitTime = TotalSplitTime + v[2];
-		TotalSplitKills = TotalSplitKills + v[3];
-		TotalSplitKillXP = TotalSplitKillXP + v[4];
-		TotalSplitQuests = TotalSplitQuests + v[5];
-		TotalSplitQuestXP = TotalSplitQuestXP + v[6];
-		PercentXPMobs = string.format("%.0f",((v[4]/(v[4]+v[6]))*100));
-		PercentXPQuests = string.format("%.0f",((v[6]/(v[4]+v[6]))*100));
-		DEFAULT_CHAT_FRAME:AddMessage("[ Lv"..v[1].." : "..SecondsToTime(TotalSplitTime).." ] - "..SecondsToTime(v[2]).." - "..v[3].." Kills ("..v[4].."xp, "..PercentXPMobs.."%), "..v[5].." Quests ("..v[6].."xp, "..PercentXPQuests.."%)",0.65,0.65,1);
-	end
-	PercentXPMobs = string.format("%.0f", (TotalSplitKillXP / (TotalSplitKillXP + TotalSplitQuestXP)) * 100);
-	PercentXPQuests = string.format("%.0f", (TotalSplitQuestXP / (TotalSplitKillXP + TotalSplitQuestXP)) * 100);
-	DEFAULT_CHAT_FRAME:AddMessage("Total: "..TotalSplitKills.." Kills ("..PercentXPMobs.."% of XP), "..TotalSplitQuests.." Quests ("..PercentXPQuests.."% of XP), "..(TotalSplitKillXP + TotalSplitQuestXP).." XP",0.65,0.65,1);
-end
-
-function SaveSplits()
-	local Counter;
-	SplitsSaved = {};
-	collectgarbage();
-	
-	for i, v in ipairs(SplitsCurrent) do
-		SplitsSaved[i] = SplitsCurrent[i];
-	end
-	DEFAULT_CHAT_FRAME:AddMessage("Splits saved successfully",0.65,0.65,1);
-			
-end
-
-function DumpSavedSplits()
-	local TotalSplitTime, TotalSplitKills, TotalSplitQuests, TotalSpliKillXP, TotalSplitQuestXP, PercentXPMobs, PercentXPQuests
-	TotalSplitTime = 0;
-	TotalSplitKills = 0;
-	TotalSplitQuests = 0;
-	TotalSplitKillXP = 0;
-	TotalSplitQuestXP = 0;
-	DEFAULT_CHAT_FRAME:AddMessage("[ Saved Split Data ]",0.65,0.65,1);
-	for i, v in ipairs(SplitsSaved) do
-		-- SplitData : 1=CurrentLevel, 2=TimeTakenLevel, 3=KillsLevel, 4=KillXPLevel, 5=QuestsLevel, 6=QuestXPLevel
-		TotalSplitTime = TotalSplitTime + v[2];
-		TotalSplitKills = TotalSplitKills + v[3];
-		TotalSplitKillXP = TotalSplitKillXP + v[4];
-		TotalSplitQuests = TotalSplitQuests + v[5];
-		TotalSplitQuestXP = TotalSplitQuestXP + v[6];
-		PercentXPMobs = string.format("%.0f",((v[4]/(v[4]+v[6]))*100));
-		PercentXPQuests = string.format("%.0f",((v[6]/(v[4]+v[6]))*100));
-		DEFAULT_CHAT_FRAME:AddMessage("[ Lv"..v[1].." : "..SecondsToTime(TotalSplitTime).." ] - "..SecondsToTime(v[2]).." - "..v[3].." Kills ("..v[4].."xp, "..PercentXPMobs.."%), "..v[5].." Quests ("..v[6].."xp, "..PercentXPQuests.."%)",0.65,0.65,1);
-	end
-	PercentXPMobs = string.format("%.0f", (TotalSplitKillXP / (TotalSplitKillXP + TotalSplitQuestXP)) * 100);
-	PercentXPQuests = string.format("%.0f", (TotalSplitQuestXP / (TotalSplitKillXP + TotalSplitQuestXP)) * 100);
-	DEFAULT_CHAT_FRAME:AddMessage("Total: "..TotalSplitKills.." Kills ("..PercentXPMobs.."% of XP), "..TotalSplitQuests.." Quests ("..PercentXPQuests.."% of XP), "..(TotalSplitKillXP + TotalSplitQuestXP).." XP",0.65,0.65,1);
-end
-
-function CompareSplits()
-	local CurrentSplitCount, SavedSplitCount, SCurrent, SSaved, STCurrent, STSaved;
-	
-	CurrentSplitCount = 0;
-	SavedSplitCount = 0;
-	SCurrent = {};
-	SSaved = {};
-	STCurrent = 0;
-	STSaved = 0;
-	
-	DEFAULT_CHAT_FRAME:AddMessage("[ Split (Overall) ]",0.65,0.65,1);
-	
-	for i, v in ipairs(SplitsCurrent) do CurrentSplitCount = i end;
-	for i, v in ipairs(SplitsSaved) do SavedSplitCount = i end;
-	
-	if (CurrentSplitCount >= SavedSplitCount) then
-		for i = 1, CurrentSplitCount do
-			local MessageText;
-			
-			MessageText = "";
-			
-			if (i > SavedSplitCount) then
-				-- Do Nothing
-			else
-				-- Comparison
-				SCurrent = SplitsCurrent[i];
-				SSaved = SplitsSaved[i];
-				STCurrent = STCurrent + SCurrent[2];
-				STSaved = STSaved + SSaved[2];
-				
-				if (SSaved[2] > SCurrent[2]) then
-					MessageText = MessageText..("[Lv "..SCurrent[1].."] : "..SecondsToTime(SCurrent[2]-SSaved[2]));
-				else
-					MessageText = MessageText..("[Lv "..SCurrent[1].."] : +"..SecondsToTime(SCurrent[2]-SSaved[2]));
-				end
-				
-				if (STSaved > STCurrent) then
-					MessageText = MessageText..(" ("..SecondsToTime(STCurrent-STSaved)..")");
-				else
-					MessageText = MessageText..(" (+"..SecondsToTime(STCurrent-STSaved)..")");
-				end
-				
-				DEFAULT_CHAT_FRAME:AddMessage(MessageText, 0.65, 0.65, 1);
-				
-			end
-		end
-	else
-		for i = 1, SavedSplitCount do
-			local MessageText;
-			
-			MessageText = "";
-			if (i > CurrentSplitCount) then
-				-- Do Nothing
-			else
-				-- Comparison
-				SCurrent = SplitsCurrent[i];
-				SSaved = SplitsSaved[i];
-				STCurrent = STCurrent + SCurrent[2];
-				STSaved = STSaved + SSaved[2];
-				
-				if (SSaved[2] > SCurrent[2]) then
-					MessageText = MessageText..("[Lv "..SCurrent[1].."] : "..SecondsToTime(SCurrent[2]-SSaved[2]));
-				else
-					MessageText = MessageText..("[Lv "..SCurrent[1].."] : +"..SecondsToTime(SCurrent[2]-SSaved[2]));
-				end
-				
-				if (STSaved > STCurrent) then
-					MessageText = MessageText..(" ("..SecondsToTime(STCurrent-STSaved)..")");
-				else
-					MessageText = MessageText..(" (+"..SecondsToTime(STCurrent-STSaved)..")");
-				end
-				
-				DEFAULT_CHAT_FRAME:AddMessage(MessageText, 0.65, 0.65, 1);
-			end
-		end
-	end
-end
-
 function SecondsToTime(time)
-	local invert;
-	if(time < 0) then
-		time = abs(time);
-		invert = true;
-	else
-		invert = false;
-	end
-	
+
 	local days = floor(time/86400);
 	local hours = floor(mod(time, 86400)/3600);
 	local minutes = floor(mod(time,3600)/60);
 	local seconds = floor(mod(time,60));
 	local returned = false;
 	
-	if (days ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..days.."d "..hours.."h "..minutes.."m "..seconds.."s")
-		else
-			return(days.."d "..hours.."h "..minutes.."m "..seconds.."s")
-		end
-	end
-	
-	if (hours ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..hours.."h "..minutes.."m "..seconds.."s")
-		else
+	if (days ~= 0) then
+		return(days.."d "..hours.."h "..minutes.."m "..seconds.."s")
+	else
+		if (hours ~= 0) then
 			return(hours.."h "..minutes.."m "..seconds.."s")
-		end
-	end
-	
-	if (minutes ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..minutes.."m "..seconds.."s")
 		else
-			return(minutes.."m "..seconds.."s")
+			if (minutes ~= 0) then
+				return(minutes.."m "..seconds.."s")
+			else
+				return(seconds.."s")
+			end
 		end
 	end
-	
-	if (seconds ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..seconds.."s")
-		else
-			return(seconds.."s")
-		end
-	end
-	
-	return(0)
 end
 
-function SecondsToTimeShort(time)
-	local invert;
-	if(time < 0) then
-		time = abs(time);
-		invert = true;
-	else
-		invert = false;
-	end
-	
+function SecondsToShortTime(time)
+
 	local days = floor(time/86400);
 	local hours = floor(mod(time, 86400)/3600);
 	local minutes = floor(mod(time,3600)/60);
 	local seconds = floor(mod(time,60));
 	local returned = false;
 	
-	if (days ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..days.."d"..hours.."h")
-		else
-			return(days.."d"..hours.."h")
-		end
-	end
-	
-	if (hours ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("="..hours.."h"..minutes.."m")
-		else
+	if (days ~= 0) then
+		return(days.."d"..hours.."h")
+	else
+		if (hours ~= 0) then
 			return(hours.."h"..minutes.."m")
-		end
-	end
-	
-	if (minutes ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..minutes.."m"..seconds.."s")
 		else
-			return(minutes.."m"..seconds.."s")
+			if (minutes ~= 0) then
+				return(minutes.."m"..seconds.."s")
+			else
+				return(seconds.."s")
+			end
 		end
 	end
-	
-	if (seconds ~= 0 and returned == false) then
-		returned = true
-		if (invert == true) then
-			return("-"..seconds.."s")
-		else
-			return(seconds.."s")
-		end
-	end
-	
-	return(0)
 end
