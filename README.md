@@ -30,10 +30,13 @@ Other Known Issues that *might* get fixed later:
 2) Slight accuracy issues - I can't find event hooks that directly ID experience from quests and exploration, so exploration may get classed as mob kills, and grey quests won't proc the workaround flag I set up causing the next exploration/mob kill to be misattributed as quest XP. No big deal in the grand scheme of things, but it's still annoying.
 
 Version Data
-	0.1a	:	Initial upload
-	
+	0.1a	:	Initial release
+
 	0.2a	:	Added split data storage and comparison functions
 				Added estimated split difference to HUD (when saved data is available)
 				Minor cosmetic bug fixes
 				
-	0.3a	:	Major internal rewrite
+	0.3a	:	Major internal rewrite to make data storage more robust
+	
+	0.4a	:	Overhaul of XP gain detection to fix miscalculation when rested
+				Bug fixes for mis-displayed data reports

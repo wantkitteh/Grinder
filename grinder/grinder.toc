@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: Grinder
-## Version: 0.2a
-## Notes: Hardcore-friendly speedrunning split tracker and progress stat display (NB: DO NOT ADD TO PRE-EXISTING CHARACTERS, add when creating new characters only)
+## Version: 0.4a
+## Notes: Hardcore-friendly speedrunning split tracker and progress stat display
 ## Author: AlissaJones
 ## SavedVariablesPerCharacter: CurrentRun, SavedRun, FirstInit
 grinder.xml

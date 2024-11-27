@@ -2,13 +2,15 @@
 local SegmentStartTime = 0;
 local SegmentAdditional = 0;
 local ResetOnNextXP = false;
+local XPcomp = 0;
+local XPcompMax = 0;
 
 -- Called by XML on addon load
 function Grinder_OnLoad()
 	this:RegisterEvent("PLAYER_ENTERING_WORLD");
 	this:RegisterEvent("TIME_PLAYED_MSG");
-	this:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN");
-	this:RegisterEvent("PLAYER_LEVEL_UP");
+	this:RegisterEvent("PLAYER_XP_UPDATE");
+	
 	this:RegisterEvent("QUEST_COMPLETE");
 	SlashCmdList["Grinder"] = Grinder_Command;
 	SLASH_Grinder1 = "/grind";
@@ -36,22 +38,24 @@ function Grinder_OnEvent()
 				end
 			end		
 			FirstInit = true;	
-		else	
+		else
 			-- DEFAULT_CHAT_FRAME:AddMessage("Normal Init");
 			if (UnitLevel("player") == 1) then
 				if (UnitXP("player") == 0) then
-					DEFAULT_CHAT_FRAME:AddMessage("Grinder: New run detected, don't forget to save run data: /splits save",1,0,0);
+					UIErrorsFrame:AddMessage("Grinder: New run detected, don't forget to save run data: /grind save",1,0,0,1, UIERRORS_HOLD_TIME);
 					ResetOnNextXP = true;
 				end
 			end
 		end
-		RequestTimePlayed();	
+		RequestTimePlayed();
+		XPcomp = UnitXP("player");
+		XPcompMax = UnitXPMax("player");
 	end
 	
 	if (event == "TIME_PLAYED_MSG") then
 		-- DEFAULT_CHAT_FRAME:AddMessage("Segment Time Init");
 		SegmentStartTime = time();
-		SegmentAdditional = arg2;
+		SegmentAdditional = arg2;		
 	end
 	
 	if (event == "QUEST_COMPLETE") then
@@ -59,106 +63,121 @@ function Grinder_OnEvent()
 		NextXPfromQuest = true;
 	end
 	
-	if (event == "CHAT_MSG_COMBAT_XP_GAIN") then
+	if (event == "PLAYER_XP_UPDATE") then
 		--DEFAULT_CHAT_FRAME:AddMessage("XP Gain Handler");
+		
+		local XPgain = 0;
+		local CLvl = 0;
+		
 		if (ResetOnNextXP == true) then
-			DEFAULT_CHAT_FRAME:AddMessage("Grinder: Going agane, good luck!",0,1,1);
+			PlaySound("RaidWarning", "master");
+			UIErrorsFrame:AddMessage("Grinder: Going agane, good luck!",1,0,0,1, UIERRORS_HOLD_TIME);
 			ResetCurrentRun();
 			ResetOnNextXP = false;
 		end
-	
-		local XPgain = getnumbersfromtext(arg1);
+		
 		local XPlevel = UnitXPMax("player");
-		local XPcurrent = UnitXP("player") + XPgain;
+		local XPcurrent = UnitXP("player");
 		local XPreq = XPlevel - XPcurrent;
-		local CLvl = UnitLevel("player");
-				
-		if (NextXPfromQuest == true) then
-			CurrentRun[CLvl]["QuestCount"] = CurrentRun[CLvl]["QuestCount"] + 1;
-			CurrentRun[CLvl]["QuestXP"] = CurrentRun[CLvl]["QuestXP"] + XPgain;
-			NextXPfromQuest = false;
+		
+		if (XPcompMax == XPlevel) then
+			XPgain = XPcurrent - XPcomp;
+			XPcomp = XPcurrent;
+			CLvl = UnitLevel("player");
 		else
-			CurrentRun[CLvl]["KillCount"] = CurrentRun[CLvl]["KillCount"] + 1;
-			CurrentRun[CLvl]["KillXP"] = CurrentRun[CLvl]["KillXP"] + XPgain;
+			XPgain = XPcompMax - XPcomp + XPcurrent;
+			XPcomp = XPcurrent;
+			XPcompMax = XPlevel;
+			CLvl = UnitLevel("player") - 1;
+		end
+		
+		if (XPgain > 0) then
+			if (NextXPfromQuest == true) then
+				CurrentRun[CLvl]["QuestCount"] = CurrentRun[CLvl]["QuestCount"] + 1;
+				CurrentRun[CLvl]["QuestXP"] = CurrentRun[CLvl]["QuestXP"] + XPgain;
+				NextXPfromQuest = false;
+			else
+				CurrentRun[CLvl]["KillCount"] = CurrentRun[CLvl]["KillCount"] + 1;
+				CurrentRun[CLvl]["KillXP"] = CurrentRun[CLvl]["KillXP"] + XPgain;
 			
-			local MessageText = "";
+				local MessageText = "";
 			
-			if (XPreq > 0) then
-				if (CurrentRun[CLvl]["CompTime"] ~= -1) then
-					MessageText = string.format("%.1f", XPreq / (CurrentRun[CLvl]["KillXP"] / CurrentRun[CLvl]["KillCount"])).." ktl, ";
-					MessageText = MessageText..string.format("%.1f", (XPcurrent / 1000) / ((time() - SegmentStartTime + SegmentAdditional) / 3600)).."k/hr, ";
-					MessageText = MessageText..SecondsToShortTime(XPreq / (XPcurrent / (time() - SegmentStartTime + SegmentAdditional)));
+				if (CLvl == UnitLevel("player")) then
 					if (CurrentRun[CLvl]["CompTime"] ~= -1) then
-						if (SavedRun[CLvl]["CompTime"] > 0) then
-							local SplitPredict = 0;
-							SplitPredict = ((time() - SegmentStartTime + SegmentAdditional) + (XPreq / (XPcurrent / (time() - SegmentStartTime + SegmentAdditional)))) - SavedRun[CLvl]["CompTime"];
-							MessageText = MessageText.." (";
-							if (SplitPredict > 0) then
-								MessageText = MessageText.. "+";
+						MessageText = string.format("%.1f", XPreq / (CurrentRun[CLvl]["KillXP"] / CurrentRun[CLvl]["KillCount"])).." ktl, ";
+						MessageText = MessageText..string.format("%.1f", (XPcurrent / 1000) / ((time() - SegmentStartTime + SegmentAdditional) / 3600)).."k/hr, ";
+						MessageText = MessageText..SecondsToShortTime(XPreq / (XPcurrent / (time() - SegmentStartTime + SegmentAdditional)));
+						if (CurrentRun[CLvl]["CompTime"] ~= -1) then
+							if (SavedRun[CLvl]["CompTime"] > 0) then
+								local SplitPredict = 0;
+								SplitPredict = ((time() - SegmentStartTime + SegmentAdditional) + (XPreq / (XPcurrent / (time() - SegmentStartTime + SegmentAdditional)))) - SavedRun[CLvl]["CompTime"];
+								MessageText = MessageText.." (";
+								if (SplitPredict > 0) then
+									MessageText = MessageText.. "+";
+								end
+								if (SplitPredict < 0) then
+									MessageText = MessageText.. "-";
+								end	
+							MessageText = MessageText..SecondsToShortTime(abs(SplitPredict))..")"
 							end
-							if (SplitPredict < 0) then
-								MessageText = MessageText.. "-";
-							end
-						MessageText = MessageText..SecondsToShortTime(abs(SplitPredict))..")"
 						end
+					else
+						MessageText = string.format("%.1f", XPreq / XPgain).." ktl";
 					end
-				else
-					MessageText = string.format("%.1f", XPreq / XPgain).." ktl";
+					UIErrorsFrame:AddMessage(MessageText,1,1,0,1, UIERRORS_HOLD_TIME);
 				end
-				UIErrorsFrame:AddMessage(MessageText,1,1,0,1, UIERRORS_HOLD_TIME);
 			end
 		end
-	end
-	
-	if (event == "PLAYER_LEVEL_UP") then
-		local CLvl = UnitLevel("player")
-		local CTxp = CurrentRun[CLvl]["KillXP"] + CurrentRun[CLvl]["QuestXP"]
-		local MessageText = "";
-		local TCRunTime = 0;
-		local TCKills = 0;
-		local TCQuests = 0;
-		local TSRunTime = 0;
 		
+		if (CLvl ~= UnitLevel("player")) then -- Level Up Messages AFTER XP gains have been processed
+			local CTxp = CurrentRun[CLvl]["KillXP"] + CurrentRun[CLvl]["QuestXP"]
+			local MessageText = "";
+			local TCRunTime = 0;
+			local TCKills = 0;
+			local TCQuests = 0;
+			local TSRunTime = 0;
+				
+			if (CurrentRun[CLvl]["CompTime"] > -1) then -- TEST THIS
+				CurrentRun[CLvl]["CompTime"] = (time() - SegmentStartTime + SegmentAdditional);			
+				if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] > 0) then
+					MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (-"..SecondsToTime(abs(SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"]))..")"
+				end
+				if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] < 0) then
+					MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (+"..SecondsToTime(abs(SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"]))..")"
+				end
+				if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] == 0) then
+					MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (Dead Heat)"
+				end
+				DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);		
+			end
 		
-		if (CurrentRun[CLvl]["CompTime"] > -1) then -- TEST THIS
-			CurrentRun[CLvl]["CompTime"] = (time() - SegmentStartTime + SegmentAdditional);			
-			if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] > 0) then
-				MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (-"..SecondsToTime(abs(SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"]))..")"
-			end
-			if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] < 0) then
-				MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (+"..SecondsToTime(abs(SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"]))..")"
-			end
-			if (SavedRun[CLvl]["CompTime"] - CurrentRun[CLvl]["CompTime"] == 0) then
-				MessageText = "Level "..CLvl.." completed in "..SecondsToTime(CurrentRun[CLvl]["CompTime"]).." (Dead Heat)"
-			end
-			DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);		
-		end -- TEST THIS
-		
-		if (SavedRun[CLvl]["CompTime"] > 0 and SavedRun[CLvl]["CompTime"] > 0) then
 			for i=1,CLvl,1
 			do
 				TCRunTime = TCRunTime + CurrentRun[i]["CompTime"];
 				TCKills = TCKills + CurrentRun[i]["KillCount"];
 				TCQuests = TCQuests + CurrentRun[i]["QuestCount"];
 				TSRunTime = TSRunTime + SavedRun[i]["CompTime"];
-			end			
-			if (TSRunTime - TCRunTime > 0 ) then
-				MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (+"..SecondsToTime(abs(TSRunTime - TCRunTime))..")";
 			end
-			if (TSRunTime - TCRunTime < 0 ) then
-				MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (+"..SecondsToTime(abs(TSRunTime - TCRunTime))..")";				
-			end
-			if (TSRunTime - TCRunTime == 0 ) then
-				MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (Dead Heat!)";
-			end
-			DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);
-		end
+			
+			DEFAULT_CHAT_FRAME:AddMessage(CurrentRun[CLvl]["KillCount"].." mobs killed ("..TCKills.." Total) for "..CurrentRun[CLvl]["KillXP"].."XP ("..string.format("%.1f", CurrentRun[CLvl]["KillXP"] / CTxp * 100).."%)",0.5,1,1);
+			DEFAULT_CHAT_FRAME:AddMessage(CurrentRun[CLvl]["QuestCount"].." quests completed ("..TCQuests.." Total) for "..CurrentRun[CLvl]["QuestXP"].."XP ("..string.format("%.1f", CurrentRun[CLvl]["QuestXP"] / CTxp * 100).."%)",0.5,1,1);
 		
-		DEFAULT_CHAT_FRAME:AddMessage(CurrentRun[CLvl]["KillCount"].." mobs killed ("..TCKills.." Total) for "..CurrentRun[CLvl]["KillXP"].."XP ("..string.format("%.1f", CurrentRun[CLvl]["KillXP"] / CTxp * 100).."%)",0.5,1,1);
-		DEFAULT_CHAT_FRAME:AddMessage(CurrentRun[CLvl]["QuestCount"].." quests completed ("..TCQuests.." Total) for "..CurrentRun[CLvl]["QuestXP"].."XP ("..string.format("%.1f", CurrentRun[CLvl]["QuestXP"] / CTxp * 100).."%)",0.5,1,1);
+			if (SavedRun[CLvl]["CompTime"] > 0 and SavedRun[CLvl]["CompTime"] > 0) then		
+				if (TSRunTime - TCRunTime > 0 ) then
+					MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (+"..SecondsToTime(abs(TSRunTime - TCRunTime))..")";
+				end
+				if (TSRunTime - TCRunTime < 0 ) then
+					MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (+"..SecondsToTime(abs(TSRunTime - TCRunTime))..")";				
+				end
+				if (TSRunTime - TCRunTime == 0 ) then
+					MessageText = "Cumulative Time: "..SecondsToTime(TCRunTime).." (Dead Heat!)";
+				end
+				DEFAULT_CHAT_FRAME:AddMessage(MessageText,0.5,1,1);
+			end
 		
-		SegmentStartTime = time();
-		SegmentAdditional = 0;
+			SegmentStartTime = time();
+			SegmentAdditional = 0;
+		end		
 	end
 end
 
@@ -297,9 +316,9 @@ function DumpCurrent()
 			TCkillXP = TCkillXP + CurrentRun[i]["KillXP"];
 			TCquestXP = TCquestXP + CurrentRun[i]["QuestXP"];
 			if (i == 1) then 
-				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"])..", "..TCkillcount.." kills for "..TCkillXP.."XP, "..TCquestcount.." quests for "..TCquestXP.."XP.",0.5,1,1);
+				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"]).." - "..CurrentRun[i]["KillCount"].." kills for "..CurrentRun[i]["KillXP"].."XP, "..CurrentRun[i]["QuestCount"].." quests for "..CurrentRun[i]["QuestXP"].."XP.",0.5,1,1);
 			else
-				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"]).." ("..SecondsToTime(TCtime).."), "..TCkillcount.." kills for "..TCkillXP.."XP, "..TCquestcount.." quests for "..TCquestXP.."XP.",0.5,1,1);
+				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(CurrentRun[i]["CompTime"]).." ("..SecondsToTime(TCtime)..") - "..CurrentRun[i]["KillCount"].." kills for "..CurrentRun[i]["KillXP"].."XP, "..CurrentRun[i]["QuestCount"].." quests for "..CurrentRun[i]["QuestXP"].."XP.",0.5,1,1);
 			end
 		else
 			if (i == 1) then
@@ -330,7 +349,11 @@ function DumpSaved()
 			TSquestcount = TSquestcount + SavedRun[i]["QuestCount"];
 			TSkillXP = TSkillXP + SavedRun[i]["KillXP"];
 			TSquestXP = TSquestXP + SavedRun[i]["QuestXP"];
-			DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(SavedRun[i]["CompTime"]).." ("..SecondsToTime(TStime).."), "..TSkillcount.." kills for "..TSkillXP.."XP, "..TSquestcount.." quests for "..TSquestXP.."XP.",0.5,1,1);
+			if (i == 1) then
+				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(SavedRun[i]["CompTime"]).." - "..SavedRun[i]["KillCount"].." kills for "..SavedRun[i]["KillXP"].."XP, "..SavedRun[i]["QuestCount"].." quests for "..SavedRun[i]["QuestXP"].."XP.",0.5,1,1);
+			else
+				DEFAULT_CHAT_FRAME:AddMessage("[Lv "..i.."] "..SecondsToTime(SavedRun[i]["CompTime"]).." ("..SecondsToTime(TStime)..") - "..SavedRun[i]["KillCount"].." kills for "..SavedRun[i]["KillXP"].."XP, "..SavedRun[i]["QuestCount"].." quests for "..SavedRun[i]["QuestXP"].."XP.",0.5,1,1);
+			end
 		end
 	end
 	DEFAULT_CHAT_FRAME:AddMessage("Total kills: "..TSkillcount.." for "..TSkillXP.."XP ("..string.format("%.1f",(TSkillXP / (TSkillXP + TSquestXP) * 100)).."%)",0.5,1,1);
